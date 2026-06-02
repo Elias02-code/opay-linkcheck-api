@@ -1,8 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel, Field
 import joblib
 import json
@@ -11,14 +8,26 @@ import math
 import os
 import ipaddress
 import socket
+import threading
 from urllib.parse import urlparse
-from collections import Counter
+from collections import defaultdict, Counter
+from datetime import datetime, timedelta
+
+# Manual rate limiter — 5 requests per minute per IP
+_rate_data = defaultdict(list)
+_rate_lock = threading.Lock()
+
+def is_rate_limited(ip: str, limit: int = 5, window_seconds: int = 60) -> bool:
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=window_seconds)
+    with _rate_lock:
+        _rate_data[ip] = [t for t in _rate_data[ip] if t > cutoff]
+        if len(_rate_data[ip]) >= limit:
+            return True
+        _rate_data[ip].append(now)
+        return False
 
 app = FastAPI(title="Phishing Detector API")
-
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,7 +53,6 @@ except Exception as e:
     ]
     MODEL_LOADED = False
 
-# Whitelist of trusted domains that bypass the model
 WHITELISTED_DOMAINS = {
     "google.com", "youtube.com", "facebook.com", "instagram.com",
     "twitter.com", "x.com", "whatsapp.com", "linkedin.com",
@@ -55,7 +63,6 @@ WHITELISTED_DOMAINS = {
     "outlook.com", "yahoo.com", "bing.com", "duckduckgo.com",
 }
 
-# Known brands that phishers commonly impersonate
 PROTECTED_BRANDS = {
     "paypal", "apple", "icloud", "google", "microsoft", "amazon",
     "netflix", "facebook", "instagram", "whatsapp", "twitter",
@@ -147,7 +154,7 @@ def root():
     return {
         "message": "Phishing Detector API is running 🚀",
         "model_loaded": MODEL_LOADED,
-        "version": "2.0.6"
+        "version": "2.0.7"
     }
 
 @app.get("/health")
@@ -159,8 +166,11 @@ def health_check():
     }
 
 @app.post("/predict")
-@limiter.limit("5/minute")
 def predict(request: Request, url_request: URLRequest):
+    client_ip = request.client.host if request.client else "unknown"
+    if is_rate_limited(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded: 5 requests per minute")
+
     if not is_safe_url(url_request.url):
         raise HTTPException(status_code=400, detail="URL not allowed")
 
