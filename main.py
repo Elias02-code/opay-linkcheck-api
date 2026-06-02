@@ -36,7 +36,6 @@ except Exception as e:
     MODEL_LOADED = False
 
 # API key
-API_KEY = os.getenv("API_KEY")
 
 # Whitelist of trusted domains that bypass the model
 WHITELISTED_DOMAINS = {
@@ -136,10 +135,7 @@ def health_check():
     }
 
 @app.post("/predict")
-def predict(request: URLRequest, x_api_key: str = Header(None)):
-    # Check API key
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+def predict(request: URLRequest):
 
     # Extract root domain
     root_domain = get_root_domain(request.url)
