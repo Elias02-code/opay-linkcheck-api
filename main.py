@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from urllib.parse import urlparse, parse_qs, urlencode
 from pydantic import BaseModel, Field
 import joblib
 import json
@@ -61,6 +62,9 @@ WHITELISTED_DOMAINS = {
     "spotify.com", "paypal.com", "zoom.us", "slack.com",
     "dropbox.com", "onedrive.com", "drive.google.com", "gmail.com",
     "outlook.com", "yahoo.com", "bing.com", "duckduckgo.com",
+    "coursera.org", "temu.com", "screenrant.com", "udemy.com",
+    "medium.com", "substack.com", "notion.so", "figma.com",
+    "canva.com", "shopify.com", "etsy.com", "aliexpress.com",
 }
 
 PROTECTED_BRANDS = {
@@ -121,7 +125,19 @@ def is_safe_url(url: str) -> bool:
     except Exception:
         return False
 
+def strip_tracking_params(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        clean = {k: v for k, v in params.items() 
+                 if not k.startswith(('utm_', 'gclid', 'fbclid', 'campaignid', 'adgroupid', 'gad_'))}
+        clean_query = urlencode(clean, doseq=True)
+        return parsed._replace(query=clean_query).geturl()
+    except:
+        return url
+    
 def extract_features(url):
+    url = strip_tracking_params(url)
     parsed = urlparse(url)
     domain = parsed.netloc
     path = parsed.path
