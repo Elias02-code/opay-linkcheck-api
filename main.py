@@ -58,9 +58,11 @@ except Exception as e:
 
 
 OPAY_WHITELIST = {
-    "opay.com",
-    "opay.com.ng",
-    "okash.com.ng",
+    "opayweb.com",
+    "ng.o-kash.com",
+    "opaycheckout.com",
+    "opaybusiness.opayweb.com",
+
 }
 
 COMPOUND_TLDS = {
