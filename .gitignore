@@ -32,3 +32,4 @@ env/
 *~
 .DS_Store
 node_modules/
+model/*.pkl
